@@ -33,7 +33,9 @@ struct cdev my_cdev;
 static char *msg = NULL;
 
 static long num1, num2, result;
+static int bad_operands[2];
 static char sign;
+static int already_sent;
 
 /*
  * INIT_MODULE -- MODULE START --
@@ -70,6 +72,8 @@ int init_module(void)
 		printk("malloc allocator address: 0x%p\n", msg);
 
 	num1 = num2 = result = sign = 0;
+	bad_operands[0] = bad_operands[1] = 0;
+	already_sent = 0;
 
     return 0;
 }
@@ -108,6 +112,42 @@ static int my_open(struct inode *inod, struct file *fil)
 	return 0;
 }
 
+static int check_bad_operands(void)
+{
+	int i;
+	for(i = 0; i < 2; ++i) {
+		if(bad_operands[i])
+			return 1;
+	}
+	return 0;
+}
+
+static int calc_result(void)
+{
+	int err_code = 0;
+	switch(sign) {
+	case '+':
+		result = num1 + num2;
+		break;
+	case '-':
+		result = num1 - num2;
+		break;
+	case '*':
+		result = num1 * num2;
+		break;
+	case '/':
+		if(num2 == 0) {
+			err_code = 1;
+		} else {
+			result = num1 / num2;
+		}
+		break;
+	default:
+		err_code = 2;
+		break;
+	}
+	return err_code;
+}
 
 /*
  * file operation: READ
@@ -125,44 +165,27 @@ static ssize_t my_read(struct file *filp, char *buff, size_t len, loff_t *off)
 
 	switch(minor){
 		case 0:
-			snprintf(msg, SIZE_OF_MSG, "num1: %ld", num1);
+			snprintf(msg, SIZE_OF_MSG, "num1: %ld\n", num1);
 			break;
 		case 1:
-			snprintf(msg, SIZE_OF_MSG, "num2: %ld", num2);
+			snprintf(msg, SIZE_OF_MSG, "num2: %ld\n", num2);
 			break;
 		case 2:
-			snprintf(msg, SIZE_OF_MSG, "sign: %c", (char)sign);
+			snprintf(msg, SIZE_OF_MSG, "sign: %c\n", sign);
 			break;
 		case 3:	
-			switch(sign) {
-				case '+':
-					result = num1 + num2;
-					break;
-				case '-':
-					result = num1 - num2;
-					break;
-				case '*':
-					result = num1 * num2;
-					break;
-				case '/':
-					if(num2 == 0) {
-						err_code = 1;
-					} else {
-						result = num1 / num2;
-					}
-					break;
-				default:
-					err_code = 2;
-					break;
-			}
-
-			if(err_code == 1) {
-				snprintf(msg, SIZE_OF_MSG, "Division by zero!");
-			} else if(err_code == 2) {
-				snprintf(msg, SIZE_OF_MSG, "Bad sign!");
+			if(!check_bad_operands()) {
+				err_code = calc_result();
+				if(err_code == 1) {
+					snprintf(msg, SIZE_OF_MSG, "Division by zero!\n");
+				} else if(err_code == 2) {
+					snprintf(msg, SIZE_OF_MSG, "Bad sign!\n");
+				} else {
+					snprintf(msg, SIZE_OF_MSG, "result: %ld\n", result);
+				}
 			}
 			else {
-				snprintf(msg, SIZE_OF_MSG, "result: %ld", result);
+				snprintf(msg, SIZE_OF_MSG, "Bad operands!\n");
 			}
 			break;
 		default:
@@ -170,6 +193,12 @@ static ssize_t my_read(struct file *filp, char *buff, size_t len, loff_t *off)
 			break;
 	}
 	count = copy_to_user(buff, msg, len);
+
+	if(already_sent) {
+		already_sent = 0;
+		return 0;
+	}
+	already_sent = 1;
 	return SIZE_OF_MSG;
 }
 
@@ -193,12 +222,22 @@ static ssize_t my_write(struct file *filp, const char *buff, size_t len, loff_t 
 
 	switch(minor) {
 		case 0:
-			kstrtol(msg, 10, &num1);
-			printk("Num1: %ld\n", num1);
+			if(kstrtol(msg, 10, &num1)) {
+				bad_operands[0] = 1;
+				printk("Bad operand in /dev/calcdev_0\n");
+			} else {
+				bad_operands[0] = 0;
+				printk("Num1: %ld\n", num1);
+			}
 			break;
 		case 1:
-			kstrtol(msg, 10, &num2);
-			printk("Num2: %ld\n", num2);
+			if(kstrtol(msg, 10, &num2)) {
+				bad_operands[1] = 1;
+				printk("Bad operand in /dev/calcdev_1\n");
+			} else {
+				bad_operands[1] = 0;
+				printk("Num2: %ld\n", num2);
+			}
 			break;
 		case 2:
 			sign = msg[0];
@@ -207,7 +246,6 @@ static ssize_t my_write(struct file *filp, const char *buff, size_t len, loff_t 
 		default:
 			break;
 	}
-
 
 	memset(msg, 0, 32);
 	return len;
