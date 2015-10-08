@@ -37,26 +37,20 @@ static int bad_operands[2];
 static char sign;
 static int already_sent;
 
-/*
- * INIT_MODULE -- MODULE START --
- * */
+
 int init_module(void)
 {
-	// -- initial the device number
 	dev_t devno;
 	unsigned int count = MY_DEV_COUNT;
 	int err;
 	devno = MKDEV(MY_MAJOR, MY_MINOR);
 	register_chrdev_region(devno, count , "calcdev");
 
-	// -- initial the char device
 	cdev_init(&my_cdev, &my_fops);
 	my_cdev.owner = THIS_MODULE;
 	err = cdev_add(&my_cdev, devno, count);
 
-	// -- check error of adding char device
-	if (err < 0)
-	{
+	if(err < 0){
 		printk("Device Add Error\n");
 		return -1;
 	}
@@ -68,40 +62,31 @@ int init_module(void)
 	printk("'mknod /dev/calcdev_3 c %d 3'.\n", MY_MAJOR);
 
 	msg = (char *)kmalloc(SIZE_OF_MSG, GFP_KERNEL);
-	if (msg !=NULL)
+	if(msg != NULL)
 		printk("malloc allocator address: 0x%p\n", msg);
 
 	num1 = num2 = result = sign = 0;
 	bad_operands[0] = bad_operands[1] = 0;
 	already_sent = 0;
 
-    return 0;
+	return 0;
 }
 
 
-/*
- * CLEANUP_MODULE -- MODULE END --
- * */
 void cleanup_module(void)
 {
 	dev_t devno;
 	printk("Goodbye\n");
 
-	if (msg){
-        /* release the malloc */
-        kfree(msg);
-	}
+	if(msg)
+		kfree(msg);
 
-	// -- release the char device
 	devno = MKDEV(MY_MAJOR, MY_MINOR);
 	unregister_chrdev_region(devno, MY_DEV_COUNT);
 	cdev_del(&my_cdev);
 }
 
 
-/*
- * file operation: OPEN
- * */
 static int my_open(struct inode *inod, struct file *fil)
 {
 	int major;
@@ -121,6 +106,7 @@ static int check_bad_operands(void)
 	}
 	return 0;
 }
+
 
 static int calc_result(void)
 {
@@ -149,9 +135,7 @@ static int calc_result(void)
 	return err_code;
 }
 
-/*
- * file operation: READ
- * */
+
 static ssize_t my_read(struct file *filp, char *buff, size_t len, loff_t *off)
 {
 	int major, minor;
@@ -163,7 +147,7 @@ static ssize_t my_read(struct file *filp, char *buff, size_t len, loff_t *off)
 	printk("FILE OPERATION READ:%d:%d\n", major, minor);
 	memset(msg, 0, 32);
 
-	switch(minor){
+	switch(minor) {
 		case 0:
 			snprintf(msg, SIZE_OF_MSG, "num1: %ld\n", num1);
 			break;
@@ -203,9 +187,6 @@ static ssize_t my_read(struct file *filp, char *buff, size_t len, loff_t *off)
 }
 
 
-/*
- * file operation: WRITE
- * */
 static ssize_t my_write(struct file *filp, const char *buff, size_t len, loff_t *off)
 {
 	int major,minor;
@@ -214,7 +195,7 @@ static ssize_t my_write(struct file *filp, const char *buff, size_t len, loff_t 
 	memset(msg, 0, 32);
 	major = MAJOR(file_inode(filp)->i_rdev);
 	minor = MINOR(file_inode(filp)->i_rdev);
-	// -- copy the string from the user space program which open and write this device
+
 	count = copy_from_user( msg, buff, len );
 
 	printk("FILE OPERATION WRITE:%d:%d\n",major,minor);
@@ -252,9 +233,6 @@ static ssize_t my_write(struct file *filp, const char *buff, size_t len, loff_t 
 }
 
 
-/*
- * file operation : CLOSE
- * */
 static int my_close(struct inode *inod, struct file *fil)
 {
 	int minor;

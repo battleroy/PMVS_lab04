@@ -7,7 +7,7 @@ modinfo ./chrdev.ko
 sudo mknod /dev/calcdev_0 c 200 0
 sudo mknod /dev/calcdev_1 c 200 1
 sudo mknod /dev/calcdev_2 c 200 2
-sudo 	mknod /dev/calcdev_3 c 200 3
+sudo mknod /dev/calcdev_3 c 200 3
 
 sudo chmod a+r+w /dev/calcdev_*
 
